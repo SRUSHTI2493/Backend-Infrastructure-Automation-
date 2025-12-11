@@ -2,8 +2,7 @@
 
 Backend Infrastructure Automation (CI/CD + Terraform + ECR)
 
-🟦 1. PROJECT OVERVIEW (WHAT YOU TELL IN INTERVIEW)
-
+🟦 1. PROJECT OVERVIEW 
 “I implemented a complete CI/CD and Infrastructure Automation system for the Backend using GitHub Actions and Terraform.
 The goal was to automatically test, build, and deploy backend code to environment-specific AWS ECR repositories (dev & master).
 I fixed the CI pipeline, refactored Terraform code, created environment-based ECR repos, and ensured automated infrastructure provisioning.”
