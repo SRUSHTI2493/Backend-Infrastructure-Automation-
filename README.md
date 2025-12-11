@@ -27,47 +27,47 @@ Ensures repeatability, reduces errors, speeds up deployment
 
 .github/workflows/ci.yml (or backend-ci.yml)
 
-Purpose: Run CI checks on every push/PR to dev and master.
+🟦 Purpose: Run CI checks on every push/PR to dev and master.
 
 Steps: checkout → setup pnpm → setup node → install deps → format check → lint → typecheck → unit tests → build.
 
-Why: catches issues early; prevents bad code from merging.
+ 🟦 Why: catches issues early; prevents bad code from merging.
 
 .github/workflows/backend-build-push.yml
 
-Purpose: Build Docker image and push to ECR when tests pass (often on tagged commits or main merges).
+🟦Purpose: Build Docker image and push to ECR when tests pass (often on tagged commits or main merges).
 
-Why: Produce immutable image artifacts for deployments.
+ 🟦Why: Produce immutable image artifacts for deployments.
 
 .github/workflows/infra-preview.yml
 
-Purpose: Run terraform plan (preview) to show infra changes in a PR.
+🟦Purpose: Run terraform plan (preview) to show infra changes in a PR.
 
-Why: Review infra changes before applying.
+🟦Why: Review infra changes before applying.
 
 .github/workflows/infra-deploy.yml
 
-Purpose: Run terraform apply (actual provision) on dev or master pushes or a workflow dispatch.
+🟦Purpose: Run terraform apply (actual provision) on dev or master pushes or a workflow dispatch.
 
 Key: Pass TF_VAR_environment = ${{ github.ref_name }} so Terraform creates resources for that environment (e.g., backend-dev).
 
-Why: Automate infra creation & keep infra as code.
+🟦Why: Automate infra creation & keep infra as code.
 
 apps/infra/provider.tf
 
-Purpose: Configure AWS provider and region.
+🟦Purpose: Configure AWS provider and region.
 
-Why: Terraform needs provider config to talk to AWS.
+🟦Why: Terraform needs provider config to talk to AWS.
 
 apps/infra/variables.tf
 
-Purpose: Define variable "environment" { ... }.
+🟦Purpose: Define variable "environment" { ... }.
 
-Why: Make ECR repo name & other resources environment-specific.
+🟦Why: Make ECR repo name & other resources environment-specific.
 
 apps/infra/main.tf
 
-Purpose: Create aws_ecr_repository and aws_ecr_lifecycle_policy.
+🟦Purpose: Create aws_ecr_repository and aws_ecr_lifecycle_policy.
 
 Example resource behaviors:
 
@@ -77,13 +77,13 @@ force_delete = false for safety
 
 lifecycle { prevent_destroy = true } to avoid accidental deletions in production
 
-Why: Ensure separate ECR repos per env and clean image retention.
+🟦Why: Ensure separate ECR repos per env and clean image retention.
 
 apps/infra/outputs.tf
 
-Purpose: Expose ecr_url and repo_name (from Terraform).
+🟦Purpose: Expose ecr_url and repo_name (from Terraform).
 
-Why: Downstream workflows (like build-push) read these outputs to tag & push images.
+🟦Why: Downstream workflows (like build-push) read these outputs to tag & push images.
 
 3) Which files depend on which (mapping / dependency)
 
