@@ -163,3 +163,270 @@ ECR repo name conflicts: If the repo name is constant (backend) both dev & maste
 Terraform errors when repo exists: either set force_delete appropriately or choose unique names per environment. Also prevent_destroy = true to avoid accidental destruction.
 
 Passing environment from workflow: Use env: TF_VAR_environment: ${{ github.ref_name }} before terraform apply to pass the environment variable into Terraform.
+
+🚀 ECS Fargate Deployment (After Image Push to ECR)
+
+Once the Docker image is pushed to ECR, your next step is to run that image in AWS ECS Fargate so your backend API becomes LIVE.
+
+📁 Files Needed for ECS Deployment (Terraform)
+
+These are the required Terraform files in your apps/infra folder.
+
+1️⃣ ecs-cluster.tf
+📌 Purpose:
+
+Defines your ECS Cluster where Fargate tasks will run.
+
+📄 File Code:
+resource "aws_ecs_cluster" "backend_cluster" {
+  name = "backend-${var.environment}-cluster"
+}
+
+🧠 Why it's needed?
+
+Because ECS tasks must run inside a cluster.
+Think of the cluster as the container orchestrator that manages tasks.
+
+2️⃣ task-definition.tf
+📌 Purpose:
+
+Defines HOW to run your backend container.
+
+📄 File Code:
+resource "aws_ecs_task_definition" "backend_task" {
+  family                   = "backend-${var.environment}-task"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = "256"
+  memory                   = "512"
+  network_mode             = "awsvpc"
+
+  execution_role_arn = aws_iam_role.ecs_execution_role.arn
+  task_role_arn       = aws_iam_role.ecs_task_role.arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "backend"
+      image     = "${aws_ecr_repository.backend.repository_url}:latest"
+      essential = true
+      portMappings = [
+        {
+          containerPort = 3000
+          hostPort      = 3000
+        }
+      ]
+    }
+  ])
+}
+
+🧠 Why it's needed?
+
+This file tells ECS:
+
+Which image to run 🐳
+
+How much CPU/RAM to give 💾
+
+Which port to expose 🌐
+
+What IAM roles are needed 🔐
+
+It's basically your Docker run instruction in Terraform form.
+
+
+3️⃣ ecs-service.tf
+📌 Purpose:
+
+This file runs your task and keeps it alive on Fargate.
+
+📄 File Code:
+resource "aws_ecs_service" "backend_service" {
+  name            = "backend-${var.environment}-service"
+  cluster         = aws_ecs_cluster.backend_cluster.id
+  task_definition = aws_ecs_task_definition.backend_task.arn
+  launch_type     = "FARGATE"
+
+  desired_count = 1
+
+  network_configuration {
+    subnets         = var.private_subnets
+    security_groups = [aws_security_group.backend_sg.id]
+    assign_public_ip = false
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.backend_tg.arn
+    container_name   = "backend"
+    container_port   = 3000
+  }
+
+  depends_on = [
+    aws_lb_listener.backend_listener
+  ]
+}
+
+🧠 Why it's needed?
+
+The ECS service:
+
+Runs 1 or more containers
+
+Restarts them if they crash
+
+Connects them to load balancer
+
+Pulls latest image on updates
+
+It ensures your backend stays live 24/7.
+
+
+4️⃣ alb.tf (Application Load Balancer)
+📌 Purpose:
+
+Exposes your backend API publicly on a stable URL.
+
+📄 File Code:
+resource "aws_lb" "backend_alb" {
+  name               = "backend-${var.environment}-alb"
+  load_balancer_type = "application"
+  subnets            = var.public_subnets
+  security_groups    = [aws_security_group.alb_sg.id]
+}
+
+resource "aws_lb_target_group" "backend_tg" {
+  name     = "backend-${var.environment}-tg"
+  port     = 3000
+  protocol = "HTTP"
+  vpc_id   = var.vpc_id
+}
+
+resource "aws_lb_listener" "backend_listener" {
+  load_balancer_arn = aws_lb.backend_alb.arn
+  port              = "80"
+  protocol          = "HTTP"
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.backend_tg.arn
+  }
+}
+
+🧠 Why it's needed?
+
+Because:
+
+✔ Users can't directly call Fargate tasks
+✔ ALB provides a public URL
+✔ ALB forwards traffic to ECS tasks
+
+It is the entry point of your backend.
+
+
+5️⃣ iam.tf
+📌 Purpose:
+
+IAM roles required for ECS to pull images from ECR & write logs.
+
+📄 File Code:
+resource "aws_iam_role" "ecs_execution_role" {
+  name = "ecsExecutionRole-${var.environment}"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Action = "sts:AssumeRole",
+      Principal = {
+        Service = "ecs-tasks.amazonaws.com"
+      },
+      Effect = "Allow"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_execution_policy" {
+  role       = aws_iam_role.ecs_execution_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+🧠 Why it's needed?
+
+ECS needs permissions to pull images from ECR ✔
+
+ECS needs permissions to push logs to CloudWatch ✔
+
+Without IAM roles, ECS cannot run tasks.
+
+
+6️⃣ security-groups.tf
+📌 Purpose:
+
+Define network access rules for ALB and ECS tasks.
+
+Example:
+resource "aws_security_group" "alb_sg" {
+  name = "alb-sg-${var.environment}"
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_security_group" "backend_sg" {
+  name = "backend-sg-${var.environment}"
+
+  ingress {
+    from_port       = 3000
+    to_port         = 3000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb_sg.id]
+  }
+}
+
+🧠 Why it's needed?
+
+ALB → ECS traffic rules
+
+Secure your backend
+
+No public access directly to ECS
+
+7️⃣ vpc.tf
+
+(Optional if your company already has VPC)
+
+📌 Purpose:
+
+Defines networking resources — subnets, routing, etc.
+
+🌟 FINAL FLOW (Add to README)
+
+Here is the clean summary with emojis—you can paste this in your README:
+
+🚀 Backend Deployment Workflow — ECR → ECS Fargate
+
+Once the Docker image is pushed to Amazon ECR, this infrastructure deploys and runs the backend API using AWS ECS Fargate:
+
+1️⃣ ECS Cluster 🏗
+Creates the container orchestration environment.
+
+2️⃣ Task Definition 📦
+Defines the container (image, port, CPU, RAM, logs, IAM roles).
+
+3️⃣ Application Load Balancer (ALB) 🌐
+Provides a public URL and routes traffic to ECS tasks.
+
+4️⃣ ECS Service 🔁
+Runs the backend as Fargate tasks and keeps them healthy.
+
+5️⃣ IAM Roles 🔐
+Allow ECS to pull images from ECR and write logs.
+
+6️⃣ Security Groups 🔥
+Allow only ALB → ECS traffic securely.
+
+7️⃣ VPC/Subnets 🌍
+Networking layer for tasks to run inside AWS.
+
+🟢Result:
+Your backend API becomes LIVE using ECS Fargate, automatically pulling the latest image from ECR, with auto-restart, load balancing, and zero-downtime deployments.
