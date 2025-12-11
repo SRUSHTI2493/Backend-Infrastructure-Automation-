@@ -7,6 +7,8 @@ Backend Infrastructure Automation (CI/CD + Terraform + ECR)
 The goal was to automatically test, build, and deploy backend code to environment-specific AWS ECR repositories (dev & master).
 I fixed the CI pipeline, refactored Terraform code, created environment-based ECR repos, and ensured automated infrastructure provisioning.”
 
+🚀 The project uses GitHub Actions + Terraform to fully automate backend CI and AWS infra 🚀. Whenever code is pushed to dev or master, GitHub Actions runs tests, linting, type-checking, and builds the backend 🔍⚙️. At the same time, Terraform automatically creates or updates an environment-specific ECR repository like backend-dev or backend-master using the branch name 🌿➡️🏗️. Secrets are pulled securely from GitHub, and Terraform outputs the repo URL so the build workflow can push Docker images 🐳📦. Safety rules like prevent_destroy = true protect production from accidental deletion 🔒. Overall, the whole pipeline ensures clean code, safe infra changes, separate dev/prod environments, and fully automated deployments 🤖✨.
+
 🔥 BUSINESS REASON:
 
 Backend images must go to different repos for dev and prod
